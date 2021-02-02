@@ -1,6 +1,9 @@
 import sys
 from PyQt5 import uic
-from PyQt5.QtWidgets import QApplication, QWidget, QDialog, QMainWindow
+from PyQt5 import QtWidgets
+from PyQt5.QtWidgets import QApplication, QWidget, QDialog, QMainWindow, QLineEdit
+from PasswordEdit import *
+import copy
 
 # main window (login page)
 class App(QMainWindow):
@@ -11,7 +14,8 @@ class App(QMainWindow):
         self.button.clicked.connect(self.printValue)  # login button
         self.register_2.mousePressEvent = self.register_page   # New user button
         self.forgetPW.mousePressEvent = self.forgetPW_page # forget password button
-    
+        self.password = PasswordEdit(self.password) # make the password bar to customized password bar (override)
+
     def printValue(self):
         print(self.account.text())
         print(self.password.text())

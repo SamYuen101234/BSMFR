@@ -1,7 +1,7 @@
 import pymongo
 from pymongo import MongoClient
 
-def connect(url):
+'''def connect(url):
     try:
         client = MongoClient(url)
         print("Connceted successfully")
@@ -61,4 +61,11 @@ list = [{'id':1234, 'name':'sam'}]
 #update(user_col, { "name": "hello" }, { "$set": { "name": "sam" } })
 #delete(user_col, { "name": "sam" })
 doc = find(user_col, { "name": "sam" })
-show_doc(doc)
+show_doc(doc)'''
+from PyQt5 import QtGui, QtCore
+
+app = QtGui.QApplication([])
+pw = QtGui.QLineEdit()
+pw.setEchoMode(QtGui.QLineEdit.Password)
+pw.show()
+app.exec_()
