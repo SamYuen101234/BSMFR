@@ -22,8 +22,8 @@
      <rect>
       <x>200</x>
       <y>150</y>
-      <width>281</width>
-      <height>31</height>
+      <width>280</width>
+      <height>30</height>
      </rect>
     </property>
     <property name="styleSheet">
@@ -35,12 +35,18 @@
      <rect>
       <x>200</x>
       <y>200</y>
-      <width>281</width>
-      <height>31</height>
+      <width>280</width>
+      <height>30</height>
      </rect>
     </property>
     <property name="styleSheet">
      <string notr="true">background-color: rgb(255, 255, 255);</string>
+    </property>
+    <property name="inputMask">
+     <string/>
+    </property>
+    <property name="text">
+     <string/>
     </property>
    </widget>
    <widget class="QLabel" name="label_4">
@@ -92,8 +98,8 @@
      <rect>
       <x>370</x>
       <y>250</y>
-      <width>113</width>
-      <height>32</height>
+      <width>110</width>
+      <height>30</height>
      </rect>
     </property>
     <property name="styleSheet">
