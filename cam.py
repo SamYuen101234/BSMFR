@@ -30,14 +30,15 @@ try:
 except:
     import queue as Queue
 
-IMG_SIZE    = 1280,720          # 640,480 or 1280,720 or 1920,1080
+IMG_SIZE    = 640,480          # 640,480 or 1280,720 or 1920,1080
 IMG_FORMAT  = QImage.Format_RGB888
 DISP_SCALE  = 2                # Scaling factor for display image
 DISP_MSEC   = 1                # Delay between display cycles
 CAP_API     = cv2.CAP_ANY       # API: CAP_ANY or CAP_DSHOW etc...
 EXPOSURE    = 0                 # Zero for automatic exposure
 TEXT_FONT   = QFont("Courier", 10)
-MTCNN_SCALE = 8                 # Scaling factor for mtcnn
+MTCNN_SCALE = 4               # Scaling factor for mtcnn
+
 
 camera_num  = 1                 # Default camera (first in list)
 image_queue = Queue.Queue()     # Queue to hold images
@@ -46,27 +47,57 @@ capturing   = True              # Flag to indicate capturing
 from mtcnn import MTCNN
 detector = MTCNN(min_face_size=int(IMG_SIZE[1]/2/MTCNN_SCALE))
 
+try:
+    import pyrealsense2 as rs
+    from depth_cam import DC
+    depth_cam = True
+    DEPTH_CAM = DC(IMG_SIZE)
+    DEPTH_CAM.start()
+    print('Using Depth CAM')
+except Exception as e:
+    print(e)
+    depth_cam = False
+    print('Using Normal CAM')
+
 # Grab images from the camera (separate thread)
 def grab_images(cam_num, queue):
-    cap = cv2.VideoCapture(cam_num-1 + CAP_API)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, IMG_SIZE[0])
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, IMG_SIZE[1])
-    if EXPOSURE:
-        cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0)
-        cap.set(cv2.CAP_PROP_EXPOSURE, EXPOSURE)
+    if depth_cam == True:
+        try:
+            while True:
+                images = DEPTH_CAM.get_frame()
+                depth_colormap = DEPTH_CAM.get_depth_colormap(images['depth_image'])
+                depth_colormap_dim = depth_colormap.shape
+                color_colormap_dim = images['color_image'].shape
+                if depth_colormap_dim != color_colormap_dim:    # if the depth image dim != color image dim
+                    resized_color_image = cv2.resize(images['color_image'], dsize=(depth_colormap_dim[1], depth_colormap_dim[0]), interpolation=cv2.INTER_AREA)
+                
+                if images['color_image'] is not None and queue.qsize() < 2:
+                    queue.put(images['color_image'])
+                else:
+                    time.sleep(DISP_MSEC / 1000.0)
+        finally:
+            # Stop streaming
+            DEPTH_CAM.pipeline.stop()
     else:
-        cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
-    while capturing:
-        if cap.grab():
-            retval, image = cap.retrieve(0)
-            if image is not None and queue.qsize() < 2:
-                queue.put(image)
-            else:
-                time.sleep(DISP_MSEC / 1000.0)
+        cap = cv2.VideoCapture(cam_num-1 + CAP_API)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, IMG_SIZE[0])
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, IMG_SIZE[1])
+        if EXPOSURE:
+            cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0)
+            cap.set(cv2.CAP_PROP_EXPOSURE, EXPOSURE)
         else:
-            print("Error: can't grab camera image")
-            break
-    cap.release()
+            cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
+        while capturing:
+            if cap.grab():
+                retval, image = cap.retrieve(0)
+                if image is not None and queue.qsize() < 2:
+                    queue.put(image)
+                else:
+                    time.sleep(DISP_MSEC / 1000.0)
+            else:
+                print("Error: can't grab camera image")
+                break
+        cap.release()
 
 # Image widget
 class ImageWidget(QWidget):
@@ -100,11 +131,15 @@ class MyWindow(QMainWindow):
         self.textbox.setMinimumSize(300, 100)
         self.text_update.connect(self.append_text)
         sys.stdout = self
+        if depth_cam == True:
+            print("Using Depth Cam")
+        else:
+            print("Using Normal Cam")
         print("Camera number %u" % camera_num)
         print("Image size %u x %u" % IMG_SIZE)
         if DISP_SCALE > 1:
             print("Display scale %u:1" % DISP_SCALE)
-
+        
         self.vlayout = QVBoxLayout()        # Window layout
         self.displays = QHBoxLayout()
         self.disp = ImageWidget(self)
@@ -215,5 +250,3 @@ if __name__ == '__main__':
         win.setWindowTitle(VERSION)
         win.start()
         sys.exit(app.exec_())
-
-#EOF
