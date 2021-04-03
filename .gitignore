@@ -1,2 +1,5 @@
-.DS_store
+.DS_Store
 arcface1.pt
+__pycache__/
+cam_local.py
+new_database.pkl

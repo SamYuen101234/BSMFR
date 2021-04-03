@@ -12,7 +12,8 @@ VERSION = "Face Recognition"
 import os
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
-from FaceMaskDetection.mask_detection import inference
+import warnings
+warnings.filterwarnings("ignore")
 
 import sys, time, threading, cv2
 try:
@@ -37,11 +38,11 @@ except:
 
 IMG_SIZE    = 640,480          # 640,480 or 1280,720 or 1920,1080
 IMG_FORMAT  = QImage.Format_RGB888
-DISP_SCALE  = 2                # Scaling factor for display image
+DISP_SCALE  = 1                # Scaling factor for display image
 DISP_MSEC   = 1                # Delay between display cycles
 CAP_API     = cv2.CAP_ANY       # API: CAP_ANY or CAP_DSHOW etc...
 EXPOSURE    = 0                 # Zero for automatic exposure
-TEXT_FONT   = QFont("Courier", 10)
+TEXT_FONT   = QFont("Courier", 20)
 MTCNN_SCALE = 4               # Scaling factor for mtcnn
 
 camera_num  = 1                 # Default camera (first in list)
@@ -50,21 +51,21 @@ capturing   = True              # Flag to indicate capturing
 
 anti_spoofing = True            # Apply anti-spoofing
 
-from mtcnn import MTCNN
-from facenet_pytorch import InceptionResnetV1
-detector = MTCNN(min_face_size=int(IMG_SIZE[1]/2/MTCNN_SCALE))
-resnet = InceptionResnetV1(pretrained='vggface2').eval() # Model of facenet for normal face recognition
-
 import torch
 from torchvision import transforms
 norm = transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
-
 trans = transforms.Compose([transforms.ToPILImage(),
                             transforms.Resize((128,128)),
                             transforms.ToTensor()
                            ])
 
+from mtcnn import MTCNN
+from facenet_pytorch import InceptionResnetV1
+detector = MTCNN(min_face_size=int(IMG_SIZE[1]/2/MTCNN_SCALE))
+resnet = InceptionResnetV1(pretrained='vggface2').eval() # Model of facenet for normal face recognition
 model = torch.load('arcface1.pt', map_location='cpu') # our model for masked face recognition
+
+from FaceMaskDetection.mask_detection import inference
 from recognize import recognize
 from util import *
 
@@ -77,12 +78,10 @@ try:
     depth_cam = True
     DEPTH_CAM = DC(IMG_SIZE)
     DEPTH_CAM.start()
-    print('Using Depth CAM')
 except Exception as e:
-    print(e)
+    logging.error(e)
     depth_cam = False
-    anti_spoofing = False
-    print('Using Normal CAM')
+    anti_spoofing = False # turn off anti-spoofing if depth camera is unavailable
 
 # Get face images with MTCNN
 def get_face(img):
@@ -92,21 +91,12 @@ def get_face(img):
         box = [MTCNN_SCALE * i for i in temp[0]['box']]
     return box
 
-def embed2json(embed, masked):
-    if masked == 0:
-        masked = False
-    elif masked == 1:
-        masked = True
-    np_bytes = pickle.dumps(np.array(embed))
-    base64_string = base64.b64encode(np_bytes).decode('ascii')
-    return {"masked": masked,  "face" : base64_string }
-
 # Grab images from the camera (separate thread)
 def grab_images(cam_num, queue):
     if depth_cam == True:
         try:
             depth_output = pd.DataFrame(columns=['depth'])
-            while True:
+            while capturing == True:
                 images = DEPTH_CAM.get_frame()
                 depth_colormap = DEPTH_CAM.get_depth_colormap(images['depth_image'])
                 depth_colormap_dim = depth_colormap.shape
@@ -178,25 +168,23 @@ class MyWindow(QMainWindow):
 
         self.central = QWidget(self)
         self.textbox = QTextEdit(self.central)
+        self.textbox.setReadOnly(True)
         self.textbox.setFont(TEXT_FONT)
-        self.textbox.setMinimumSize(300, 100)
-        self.text_update.connect(self.append_text)
+        self.textbox.setMinimumSize(300, 50)
+        self.text_update.connect(self.update_text)
         sys.stdout = self
         if depth_cam == True:
-            print("Using Depth Cam")
+            cam_info = "Using 3D camera"
         else:
-            print("Using Normal Cam")
-        print("Camera number %u" % camera_num)
-        print("Image size %u x %u" % IMG_SIZE)
-        if DISP_SCALE > 1:
-            print("Display scale %u:1" % DISP_SCALE)
+            cam_info = "Using normal camera (anti-spoofing unavailable)"
 
         self.vlayout = QVBoxLayout()        # Window layout
         self.displays = QHBoxLayout()
         self.disp = ImageWidget(self)
         self.displays.addWidget(self.disp)
         self.vlayout.addLayout(self.displays)
-        self.label = QLabel(self)
+        self.label = QLabel(cam_info, self)
+        self.label.setFont(TEXT_FONT)
         self.vlayout.addWidget(self.label)
         self.vlayout.addWidget(self.textbox)
         self.central.setLayout(self.vlayout)
@@ -207,7 +195,7 @@ class MyWindow(QMainWindow):
         exitAction.setShortcut('Ctrl+Q')
         exitAction.triggered.connect(self.close)
         self.fileMenu = self.mainMenu.addMenu('&File')
-        self.fileMenu.addAction(exitAction)
+        self.mainMenu.addAction(exitAction)
 
         self.mask = 2
         self.detect_mask_count = 0
@@ -237,12 +225,14 @@ class MyWindow(QMainWindow):
 
                     if anti_spoofing and MSE < 3: # fake, rendering red bounding box
                         img = cv2.rectangle(img, (box[0],box[1]), (box[0]+box[2],box[1]+box[3]), (255,0,0), 5)
+                        print("Warning")
                         self.mask = 2
                         self.detect_mask_count = 0
                         self.recognize_count = 0
                         self.recognize_result = None
                     elif anti_spoofing and MSE > 15: # distance too closed to camera, anti-spoofing fails, rendering orange box
                         img = cv2.rectangle(img, (box[0],box[1]), (box[0]+box[2],box[1]+box[3]), (255,165,0), 5)
+                        print("Please keep around 0.6m away from the camera")
                         self.mask = 2
                         self.detect_mask_count = 0
                         self.recognize_count = 0
@@ -283,11 +273,19 @@ class MyWindow(QMainWindow):
                         add_bounding_box(img, box, self.mask, self.recognize_result)
                         self.recognize_count += 1
 
+                        if self.mask == 1:
+                            print("Please put on a mask")
+                        elif self.mask == 0:
+                            if self.recognize_result is not None:
+                                print("Welcome " + self.recognize_result)
+
                 elif self.mask != 2:
                     self.mask = 2
                     self.detect_mask_count = 0
                     self.recognize_count = 0
                     self.recognize_result = None
+                else:
+                    print(" ")
 
                 self.display_image(img, display, scale)
 
@@ -309,16 +307,9 @@ class MyWindow(QMainWindow):
         pass
 
     # Append to text display
-    def append_text(self, text):
-        cur = self.textbox.textCursor()     # Move cursor to end of text
-        cur.movePosition(QTextCursor.End)
-        s = str(text)
-        while s:
-            head,sep,s = s.partition("\n")  # Split line at LF
-            cur.insertText(head)            # Insert text at cursor
-            if sep:                         # New line if LF
-                cur.insertBlock()
-        self.textbox.setTextCursor(cur)     # Update visible cursor
+    def update_text(self, text):
+        if str(text) != "\n":
+            self.textbox.setText(str(text))
 
     # Window is closing: stop video capture
     def closeEvent(self, event):
@@ -335,6 +326,7 @@ if __name__ == '__main__':
     if camera_num < 1:
         print("Invalid camera number '%s'" % sys.argv[1])
     else:
+        app = None
         app = QApplication(sys.argv)
         win = MyWindow()
         win.show()
