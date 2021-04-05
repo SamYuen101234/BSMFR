@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import logging
+import time
 
 VERSION = "Face Recognition"
 
@@ -214,6 +215,16 @@ class MyWindow(QMainWindow):
 
     # Fetch camera image from queue, and display it
     def show_image(self, imageq, display, scale):
+
+        if self.recognize_result is not None:
+            time.sleep(5)
+            with imageq.mutex:
+                imageq.queue.clear()
+            self.mask = 2
+            self.detect_mask_count = 0
+            self.recognize_count = 0
+            self.recognize_result = None
+
         if not imageq.empty():
             img, box, depth = imageq.get()
             if img is not None and len(img) > 0:
@@ -222,7 +233,7 @@ class MyWindow(QMainWindow):
 
                     if anti_spoofing:
                         MSE = check_depth(depth)
-
+                        logging.warning(str(MSE))
                     if anti_spoofing and MSE < 3: # fake, rendering red bounding box
                         img = cv2.rectangle(img, (box[0],box[1]), (box[0]+box[2],box[1]+box[3]), (255,0,0), 5)
                         print("Warning")
@@ -275,6 +286,8 @@ class MyWindow(QMainWindow):
 
                         if self.mask == 1:
                             print("Please put on a mask")
+                            if self.recognize_result is not None:
+                                print("Welcome " + self.recognize_result + ", please put on your mask before entering")
                         elif self.mask == 0:
                             if self.recognize_result is not None:
                                 print("Welcome " + self.recognize_result)
@@ -291,6 +304,7 @@ class MyWindow(QMainWindow):
 
     # Display an image, reduce size if required
     def display_image(self, img, display, scale=1):
+
         disp_size = img.shape[1]//scale, img.shape[0]//scale
         disp_bpl = disp_size[0] * 3
         if scale > 1:
