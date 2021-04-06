@@ -286,7 +286,7 @@ class MyWindow(QMainWindow):
                                 self.recognize_result = result.json()['user']['first_name'] + " " + result.json()['user']['last_name']
                             else:
                                 self.recognize_result = None
-                                if self.lock.value == 0.0:
+                                if self.lock.value == 0.0 and self.door != None:
                                     p2 = Process(target=self.door.reject, args=[self.lock])
                                     p2.start()
                                 
@@ -299,13 +299,13 @@ class MyWindow(QMainWindow):
                             if self.recognize_result is not None:
                                 print("Welcome " + self.recognize_result + ", please put on your mask before entering")
                                 #self.door.open()
-                                if self.lock.value == 0.0:
+                                if self.lock.value == 0.0 and self.door != None:
                                     p1 = Process(target=self.door.open, args=[self.lock])
                                     p1.start()
                         elif self.mask == 0:
                             if self.recognize_result is not None:
                                 print("Welcome " + self.recognize_result)
-                                if self.lock.value == 0.0:
+                                if self.lock.value == 0.0 and self.door != None:
                                     p1 = Process(target=self.door.open, args=[self.lock])
                                     p1.start()
                         
@@ -366,7 +366,7 @@ if __name__ == '__main__':
             # create a PyMata instance
             # set the COM port string specifically for your platform
             Arduino = PyMata("/dev/cu.usbmodem142101")
-            # create an entrance
+            # create an entrance/door
             ENTRANCE = door(Arduino)
         except:
             try:
@@ -375,10 +375,10 @@ if __name__ == '__main__':
                 # create an entrance
                 ENTRANCE = door(Arduino)
             except:
+                # if there is no door
                 print("No door exist")
                 ENTRANCE = None
-
-
+                
         app = None
         app = QApplication(sys.argv)
         win = MyWindow(ENTRANCE)
