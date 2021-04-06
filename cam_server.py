@@ -7,6 +7,9 @@ import numpy as np
 import pandas as pd
 import logging
 import time
+from door import *
+from pymata import *
+from multiprocessing import Process, Lock, Value
 
 VERSION = "Face Recognition"
 
@@ -164,7 +167,7 @@ class MyWindow(QMainWindow):
     text_update = pyqtSignal(str)
 
     # Create main window
-    def __init__(self, parent=None):
+    def __init__(self, ENTRANCE, parent=None):
         QMainWindow.__init__(self, parent)
 
         self.central = QWidget(self)
@@ -202,6 +205,9 @@ class MyWindow(QMainWindow):
         self.detect_mask_count = 0
         self.recognize_count = 0
         self.recognize_result = None
+        
+        self.door = ENTRANCE
+        self.lock = Value('d', 0.0, lock=False)
 
     # Start image capture & display
     def start(self):
@@ -216,14 +222,14 @@ class MyWindow(QMainWindow):
     # Fetch camera image from queue, and display it
     def show_image(self, imageq, display, scale):
 
-        if self.recognize_result is not None:
-            time.sleep(5)
+        '''if self.recognize_result is not None:
+            #time.sleep(5)
             with imageq.mutex:
                 imageq.queue.clear()
             self.mask = 2
             self.detect_mask_count = 0
             self.recognize_count = 0
-            self.recognize_result = None
+            self.recognize_result = None'''
 
         if not imageq.empty():
             img, box, depth = imageq.get()
@@ -280,6 +286,10 @@ class MyWindow(QMainWindow):
                                 self.recognize_result = result.json()['user']['first_name'] + " " + result.json()['user']['last_name']
                             else:
                                 self.recognize_result = None
+                                if self.lock.value == 0.0:
+                                    p2 = Process(target=self.door.reject, args=[self.lock])
+                                    p2.start()
+                                
 
                         add_bounding_box(img, box, self.mask, self.recognize_result)
                         self.recognize_count += 1
@@ -288,9 +298,20 @@ class MyWindow(QMainWindow):
                             print("Please put on a mask")
                             if self.recognize_result is not None:
                                 print("Welcome " + self.recognize_result + ", please put on your mask before entering")
+                                #self.door.open()
+                                if self.lock.value == 0.0:
+                                    p1 = Process(target=self.door.open, args=[self.lock])
+                                    p1.start()
                         elif self.mask == 0:
                             if self.recognize_result is not None:
                                 print("Welcome " + self.recognize_result)
+                                if self.lock.value == 0.0:
+                                    p1 = Process(target=self.door.open, args=[self.lock])
+                                    p1.start()
+                        
+                        #print(self.lock.value)
+                        
+                            
 
                 elif self.mask != 2:
                     self.mask = 2
@@ -331,6 +352,7 @@ class MyWindow(QMainWindow):
         capturing = False
         self.capture_thread.join()
 
+
 if __name__ == '__main__':
     if len(sys.argv) > 1:
         try:
@@ -340,9 +362,26 @@ if __name__ == '__main__':
     if camera_num < 1:
         print("Invalid camera number '%s'" % sys.argv[1])
     else:
+        try:
+            # create a PyMata instance
+            # set the COM port string specifically for your platform
+            Arduino = PyMata("/dev/cu.usbmodem142101")
+            # create an entrance
+            ENTRANCE = door(Arduino)
+        except:
+            try:
+                # the second port
+                Arduino = PyMata("/dev/cu.usbmodem14101")
+                # create an entrance
+                ENTRANCE = door(Arduino)
+            except:
+                print("No door exist")
+                ENTRANCE = None
+
+
         app = None
         app = QApplication(sys.argv)
-        win = MyWindow()
+        win = MyWindow(ENTRANCE)
         win.show()
         win.setWindowTitle(VERSION)
         win.start()
